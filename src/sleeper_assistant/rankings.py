@@ -25,6 +25,7 @@ class RankedPlayer:
     position: str
     team: str
     bye: int | None = None
+    pos_rank: int | None = None  # depth at position, e.g. 1 for "RB1" in the CSV's POS cell
 
 
 def _norm_header(h: str) -> str:
@@ -55,6 +56,12 @@ def _clean_pos(raw: str) -> str:
     if base == "DEF":
         base = "DST"
     return base
+
+
+def _pos_rank(raw: str) -> int | None:
+    """Pull the depth number off a POS cell like "RB14" -> 14, or None if bare."""
+    m = re.match(r"[A-Z]+[\s-]*(\d+)", raw.strip().upper())
+    return int(m.group(1)) if m else None
 
 
 def load_rankings(path: Path) -> list[RankedPlayer]:
@@ -89,9 +96,11 @@ def load_rankings(path: Path) -> list[RankedPlayer]:
         name = row[i_name].strip()
         if not name:
             continue
-        pos = _clean_pos(row[i_pos]) if i_pos < len(row) else ""
+        raw_pos = row[i_pos] if i_pos < len(row) else ""
+        pos = _clean_pos(raw_pos)
         if pos not in _KNOWN_POS:
             continue
+        pos_rank = _pos_rank(raw_pos)
 
         fallback_rank += 1
         rank = _to_int(row[i_rank]) if i_rank is not None and i_rank < len(row) else None
@@ -109,6 +118,7 @@ def load_rankings(path: Path) -> list[RankedPlayer]:
                 position=pos,
                 team=team,
                 bye=bye,
+                pos_rank=pos_rank,
             )
         )
 

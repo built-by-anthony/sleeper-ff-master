@@ -38,7 +38,19 @@ ALIASES: dict[str, str] = {
     "chip trayanum": "deamonte trayanum",   # nickname
 }
 
-# NFL team-name -> abbreviation, for matching DST rows however FantasyPros spells them.
+# Same pressure valve as ALIASES, but for players a CSV ranks under a different
+# position than Sleeper lists them at (one-off tweeners, not a systemic split
+# like FB/RB — those are folded in _sleeper_pos instead). Keys are normalized
+# names; values are the Sleeper position to search under instead of the CSV's.
+POSITION_OVERRIDES: dict[str, str] = {
+    "max bredeson": "TE",  # FantasyPros ranks him as RB; Sleeper lists him TE
+}
+
+# NFL team-name (or a divergent abbreviation) -> Sleeper's abbreviation, for
+# matching DST rows however FantasyPros spells them. Keys are lowercase; values
+# are the abbreviation Sleeper uses. Doubles as the fix for abbreviations the
+# two sources disagree on (e.g. Jacksonville: FantasyPros "JAC" vs Sleeper
+# "JAX") since a lowercased abbreviation is just another key into this table.
 _TEAM_ABBR = {
     "cardinals": "ARI", "arizona": "ARI",
     "falcons": "ATL", "atlanta": "ATL",
@@ -54,7 +66,7 @@ _TEAM_ABBR = {
     "packers": "GB", "green bay": "GB",
     "texans": "HOU", "houston": "HOU",
     "colts": "IND", "indianapolis": "IND",
-    "jaguars": "JAX", "jacksonville": "JAX",
+    "jaguars": "JAX", "jacksonville": "JAX", "jac": "JAX",
     "chiefs": "KC", "kansas city": "KC",
     "raiders": "LV", "las vegas": "LV",
     "chargers": "LAC",
@@ -89,6 +101,10 @@ def normalize_name(name: str) -> str:
 
 def _sleeper_pos(player: dict[str, Any]) -> str:
     pos = (player.get("position") or "").upper()
+    if pos == "FB":
+        # Fullbacks are drafted/ranked as RBs everywhere (CSVs, Sleeper's own
+        # fantasy_positions); keep them in the RB bucket so name matching finds them.
+        return "RB"
     if pos:
         return pos
     fps = player.get("fantasy_positions") or []
@@ -142,6 +158,7 @@ class PlayerMatcher:
         # Team defenses: match by team abbreviation.
         if pos == "DEF":
             team = rp.team.upper()
+            team = _TEAM_ABBR.get(team.lower(), team)
             if not team:
                 # try to read the team out of the CSV "name" (e.g. "Eagles")
                 for word in normalize_name(rp.name).split():
@@ -154,6 +171,7 @@ class PlayerMatcher:
             return MatchResult(rp, None, "unmatched")
 
         norm = normalize_name(rp.name)
+        pos = POSITION_OVERRIDES.get(norm, pos)
 
         # 1. exact name+position
         pids = self._by_name_pos.get((norm, pos))

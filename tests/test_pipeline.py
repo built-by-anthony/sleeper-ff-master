@@ -4,7 +4,7 @@ from conftest import fake_players
 
 from sleeper_assistant.engine import Engine, base_value, studs
 from sleeper_assistant.matching import PlayerMatcher, match_all
-from sleeper_assistant.rankings import load_rankings
+from sleeper_assistant.rankings import RankedPlayer, _pos_rank, load_rankings
 from sleeper_assistant.roster import FLEX, STARTER, SURPLUS, RosterModel
 from sleeper_assistant.state import DraftMeta, DraftState
 
@@ -25,6 +25,15 @@ def test_load_rankings():
     assert all(p.position in {"QB", "RB", "WR", "TE", "K", "DST"} for p in rk)
 
 
+def test_pos_rank_tolerates_separators_between_letters_and_digits():
+    # FantasyPros sheets vary in whether the POS cell's depth suffix is bare
+    # ("RB14"), space-separated ("RB 14"), or hyphenated ("RB-14").
+    assert _pos_rank("RB14") == 14
+    assert _pos_rank("RB 14") == 14
+    assert _pos_rank("RB-14") == 14
+    assert _pos_rank("DST") is None
+
+
 # --- matching --------------------------------------------------------------
 
 def test_matching_covers_everyone():
@@ -43,6 +52,36 @@ def test_matching_handles_suffix_and_alias():
     assert by_name["Kenneth Walker III"].player_id == "1012"
     assert by_name["Gabe Davis"].player_id == "1014"            # alias
     assert by_name["Dallas Cowboys"].player_id == "DAL"         # team def
+
+
+def test_position_override_finds_player_listed_under_different_position():
+    # FantasyPros ranks Max Bredeson as an RB; Sleeper lists him at TE.
+    # matching.POSITION_OVERRIDES should redirect the lookup to TE.
+    rp = RankedPlayer(rank=200, tier=17, name="Max Bredeson", position="RB", team="FA")
+    matcher = PlayerMatcher(fake_players())
+    result = matcher.match(rp)
+    assert result.player_id == "1016"
+    assert result.method == "exact"
+
+
+def test_team_abbr_alias_resolves_jac_to_jax_defense():
+    # FantasyPros spells Jacksonville's defense "JAC"; Sleeper keys it "JAX".
+    # matching._TEAM_ABBR_ALIASES should bridge that.
+    rp = RankedPlayer(rank=150, tier=13, name="Jacksonville Jaguars", position="DST", team="JAC")
+    matcher = PlayerMatcher(fake_players())
+    result = matcher.match(rp)
+    assert result.player_id == "JAX"
+    assert result.method == "team-def"
+
+
+def test_fullback_folds_into_rb_bucket_for_matching():
+    # Sleeper lists fullbacks at position "FB"; CSVs (and everyone else) treat
+    # them as RBs. matching._sleeper_pos() folds FB into the RB bucket.
+    rp = RankedPlayer(rank=180, tier=15, name="Alec Ingold", position="RB", team="MIA")
+    matcher = PlayerMatcher(fake_players())
+    result = matcher.match(rp)
+    assert result.player_id == "1017"
+    assert result.method == "exact"
 
 
 # --- roster model ----------------------------------------------------------
@@ -104,12 +143,14 @@ def test_dynasty_is_bpa_when_roster_has_room():
 
 # --- stud indicator --------------------------------------------------------
 
-def test_studs_are_tier1_best_rank_first():
+def test_studs_are_tier1_or_2_best_rank_first():
     avail = _matched()
     s = studs(avail)
-    # sample CSV has exactly four tier-1 players; all must have tier 1, ordered by rank
-    assert [m.ranked.rank for m in s] == [1, 2, 3, 4]
-    assert all(m.ranked.tier == 1 for m in s)
+    ranks = [m.ranked.rank for m in s]
+    # sorted best-rank-first, and every stud is tier 1 or 2
+    assert ranks == sorted(ranks)
+    assert all(m.ranked.tier <= 2 for m in s)
+    assert any(m.ranked.tier == 2 for m in s)  # confirms the tier-2 broadening took
 
 
 def test_stud_surfaces_even_when_scored_out_of_top3():
@@ -126,16 +167,22 @@ def test_stud_surfaces_even_when_scored_out_of_top3():
     assert stud_ids - rec_ids
 
 
-def test_stud_line_caps_at_four_with_more_suffix():
-    from sleeper_assistant.ui import _stud_line
+def test_studs_table_lists_all_ranked_with_depth():
+    from rich.console import Console
+
+    from sleeper_assistant.ui import _studs_table
     avail = _matched()
     s = studs(avail)
-    # four studs → no "+N more"; fabricate a fifth to exercise the cap
-    assert _stud_line([]) is None
-    line = _stud_line(s + s[:1])  # 5 entries
-    assert "+1 more" in line.plain
-    # first four names present, best-rank-first
-    assert "Christian McCaffrey (RB)" in line.plain
+    assert _studs_table([], {}) is None
+    group = _studs_table(s, {})
+    console = Console(width=100)
+    with console.capture() as cap:
+        console.print(group)
+    out = cap.get()
+    # best-rank-first, all four present, with position depth (e.g. "RB1")
+    assert "Christian McCaffrey" in out
+    assert "RB1" in out
+    assert "WR1" in out
 
 
 # --- draft state / clock ---------------------------------------------------
