@@ -45,13 +45,17 @@ def base_value(rank: int) -> float:
     return _BASE * (_DECAY ** (rank - 1))
 
 
-def studs(available: list[MatchResult]) -> list[MatchResult]:
-    """Available tier-1 players, best-rank-first — the stud indicator (PLAN.md §10).
+_STUD_MAX_TIER = 2
 
-    A stud is an *absolute, tier-based* property of the player (`tier == 1` on the
-    loaded CSV), not a function of the board or your pick number: a tier-1 player is
-    a stud in round 1 and still a stud if he slides. Sheets without a tier column
-    synthesize tiers in buckets of 12, so this degrades to "rank <= 12".
+
+def studs(available: list[MatchResult]) -> list[MatchResult]:
+    """Available tier-1/tier-2 players, best-rank-first — the stud indicator
+    (PLAN.md §10).
+
+    A stud is an *absolute, tier-based* property of the player (`tier <= 2` on the
+    loaded CSV), not a function of the board or your pick number: a tier-1/2 player
+    is a stud in round 1 and still a stud if he slides. Sheets without a tier
+    column synthesize tiers in buckets of 12, so this degrades to "rank <= 24".
 
     Display-layer only: the engine scoring is deliberately untouched. The stud line
     gets its teeth purely by surfacing — because the need boost (redraft) or depth
@@ -59,7 +63,7 @@ def studs(available: list[MatchResult]) -> list[MatchResult]:
     guarantees he can't hide. He is never rescored.
     """
     return sorted(
-        (m for m in available if m.ranked.tier == 1),
+        (m for m in available if m.ranked.tier <= _STUD_MAX_TIER),
         key=lambda m: m.ranked.rank,
     )
 

@@ -13,5 +13,9 @@ configs/leagues.json
 data/*.csv
 !data/sample_redraft.csv
 
+# Claude Junk
 CLAUDE.md 
 PLAN.md
+
+# Mac Junk
+.DS_STORE

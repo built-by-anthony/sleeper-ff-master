@@ -19,6 +19,10 @@ from .state import DraftState, injury_tag
 _POS_ORDER = ["QB", "RB", "WR", "TE", "K", "DEF"]
 
 
+def _injury_style(tag: str) -> str:
+    return "bold red" if tag.startswith(("OUT", "IR", "D", "PUP", "SUS")) else "yellow"
+
+
 def slot_display(roster: RosterModel, counts: dict[str, int]) -> list[tuple[str, bool]]:
     slots: list[tuple[str, bool]] = []
     for pos in _POS_ORDER:
@@ -35,7 +39,7 @@ def slot_display(roster: RosterModel, counts: dict[str, int]) -> list[tuple[str,
 
 def _header(state: DraftState, league_name: str) -> Text:
     t = Text()
-    t.append(f" {league_name} ", style="bold white on blue")
+    t.append(f" {league_name} ", style="bold white on dark_blue")
     t.append(f"  Round {state.current_round()} · Pick {state.next_pick_no()}")
     drafter = state.on_clock_name()
     if drafter:
@@ -93,8 +97,7 @@ def _recs_table(recs: list[Recommendation], injuries: dict[str, str]) -> Table:
         tag = injuries.get(r.match.player_id or "", "")
         if tag:
             # Out/Doubtful/IR are draft-relevant even in dynasty → louder.
-            style = "bold red" if tag.startswith(("OUT", "IR", "D", "PUP", "SUS")) else "yellow"
-            detail.append(f"  ⚕ {tag}", style=style)
+            detail.append(f"  ⚕ {tag}", style=_injury_style(tag))
         tbl.add_row(
             Text(f"{i}.", style="bold"),
             Text(rp.name, style="bold white"),
@@ -107,20 +110,31 @@ def _recs_table(recs: list[Recommendation], injuries: dict[str, str]) -> Table:
     return tbl
 
 
-def _stud_line(studs: list[MatchResult]) -> Text | None:
-    """A single orthogonal interrupt line: all available tier-1 players, best-rank
-    first, capped at 4 names with a `+N more` suffix. Hidden when the board has no
-    tier-1 player. Not a per-row badge and not a pinned rec — the top-3 stay pure
+def _studs_table(studs: list[MatchResult], injuries: dict[str, str]) -> Group | None:
+    """All available tier-1 players, best-rank first, as a table: rank, name,
+    depth (e.g. "RB1"), and injury status. Hidden when the board has no tier-1
+    player. Not a per-row badge and not a pinned rec — the top-3 stay pure
     engine output (PLAN.md §10)."""
     if not studs:
         return None
-    t = Text(" ⭐ STUD AVAILABLE: ", style="bold yellow")
-    names = [f"{m.ranked.name} ({m.ranked.position})" for m in studs[:4]]
-    t.append(", ".join(names), style="yellow")
-    extra = len(studs) - 4
-    if extra > 0:
-        t.append(f"  +{extra} more", style="dim")
-    return t
+    heading = Text(" ⭐ STUD AVAILABLE", style="bold yellow")
+    tbl = Table.grid(padding=(0, 1))
+    tbl.add_column(justify="right")
+    tbl.add_column()
+    tbl.add_column()
+    tbl.add_column()
+    for i, m in enumerate(studs, 1):
+        rp = m.ranked
+        depth = f"{rp.position}{rp.pos_rank}" if rp.pos_rank else rp.position
+        tag = injuries.get(m.player_id or "", "")
+        style = _injury_style(tag)
+        tbl.add_row(
+            Text(f"{i}.", style="bold"),
+            Text(rp.name, style="bold white"),
+            Text(depth, style="cyan"),
+            Text(f"⚕ {tag}" if tag else "", style=style),
+        )
+    return Group(heading, tbl)
 
 
 def _alerts_group(alerts: list[Alert]) -> Group | None:
@@ -159,6 +173,11 @@ def render(
     else:
         parts.append(Text(banner(league_name), style="bold blue"))
     parts.append(Text(""))
+    studs = studs or []
+    injuries = {
+        pid: injury_tag(state.players_meta.get(pid))
+        for pid in {r.match.player_id for r in recs} | {m.player_id for m in studs}
+    }
     parts += [
         _header(state, league_name),
         Text(""),
@@ -166,15 +185,12 @@ def render(
         _need_line(state, roster, engine_mode),
         Text(""),
         Text(" ▶ DRAFT NOW", style="bold green"),
-        _recs_table(
-            recs,
-            {r.match.player_id: injury_tag(state.players_meta.get(r.match.player_id)) for r in recs},
-        ),
+        _recs_table(recs, injuries),
     ]
-    stud = _stud_line(studs or [])
-    if stud is not None:
+    stud_table = _studs_table(studs, injuries)
+    if stud_table is not None:
         parts.append(Text(""))
-        parts.append(stud)
+        parts.append(stud_table)
     ag = _alerts_group(alerts)
     if ag is not None:
         parts.append(Text(""))

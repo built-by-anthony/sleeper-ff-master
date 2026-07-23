@@ -34,10 +34,23 @@ def fake_players() -> dict:
     add("1013", "Travis", "Kelce", "TE", "KC")
     add("1014", "Gabriel", "Davis", "WR", "JAX")      # CSV "Gabe Davis" — alias
     add("1015", "Justin", "Tucker", "K", "BAL")
+    # Sleeper lists him at TE though FantasyPros ranks him RB — exercises
+    # matching.POSITION_OVERRIDES.
+    add("1016", "Max", "Bredeson", "TE", "FA")
+    # Sleeper lists fullbacks at "FB" — exercises the FB->RB fold in
+    # matching._sleeper_pos().
+    add("1017", "Alec", "Ingold", "FB", "MIA")
     # team defense
     p["DAL"] = {
         "player_id": "DAL", "first_name": "Dallas", "last_name": "Cowboys",
         "full_name": "Dallas Cowboys", "position": "DEF",
         "fantasy_positions": ["DEF"], "team": "DAL",
+    }
+    # Sleeper keys Jacksonville under "JAX" while FantasyPros CSVs often use
+    # "JAC" — exercises matching._TEAM_ABBR_ALIASES.
+    p["JAX"] = {
+        "player_id": "JAX", "first_name": "Jacksonville", "last_name": "Jaguars",
+        "full_name": "Jacksonville Jaguars", "position": "DEF",
+        "fantasy_positions": ["DEF"], "team": "JAX",
     }
     return p

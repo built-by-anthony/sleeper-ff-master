@@ -8,6 +8,7 @@ it needs so the assistants can't drift apart on config/identity handling.
 from __future__ import annotations
 
 import os
+import sys
 from pathlib import Path
 
 import typer
@@ -69,8 +70,17 @@ def _pick_league(cfg: Config, key: str | None) -> LeagueConfig:
         raise typer.Exit(1)
     if len(cfg.leagues) == 1:
         return next(iter(cfg.leagues.values()))
+    items = list(cfg.leagues.items())
+    # Interactive terminal → arrow-key menu; otherwise fall back to the text
+    # prompt so pipes and tests still work.
+    if sys.stdin.isatty():
+        from . import menu
+
+        labels = [f"{k} — {lc.name} ({lc.engine})" for k, lc in items]
+        idx = menu.select("Which league?", labels, console=console)
+        return items[idx][1]
     console.print("[bold]Which league?[/]")
-    for k, lc in cfg.leagues.items():
+    for k, lc in items:
         console.print(f"  [cyan]{k}[/] — {lc.name} ({lc.engine})")
     choice = Prompt.ask("league", choices=list(cfg.leagues.keys()))
     return cfg.leagues[choice]
