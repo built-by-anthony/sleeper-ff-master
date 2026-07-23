@@ -28,7 +28,7 @@ from .common import (
     console,
 )
 
-POLL_SECONDS = 2.5
+POLL_SECONDS = 1.5
 
 
 def _resolve_draft(client: SleeperClient, league_id: str) -> dict:
