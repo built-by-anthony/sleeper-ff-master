@@ -1,0 +1,17 @@
+# Python / uv
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.coverage
+
+# Runtime data
+.cache/
+configs/leagues.json
+
+# Real downloaded rankings CSVs — keep only the sample
+data/*.csv
+!data/sample_redraft.csv
+
+CLAUDE.md 
+PLAN.md
