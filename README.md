@@ -5,7 +5,6 @@ from Sleeper's public API, and shows a single auto-refreshing screen telling you
 who to draft next. It's an **advisor, not an autopilot** — you still tap the pick
 in the Sleeper app; the tool detects it on the next poll and recomputes.
 
-See [PLAN.md](PLAN.md) for the full design rationale.
 
 ## Install
 
